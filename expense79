@@ -1,0 +1,162 @@
+import sqlite3
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Initialize database connection
+conn = sqlite3.connect('finance_tracker.db')
+cursor = conn.cursor()
+
+# Create tables for income and expenses
+cursor.execute('''CREATE TABLE IF NOT EXISTS income (
+                    id INTEGER PRIMARY KEY,
+                    source TEXT,
+                    amount REAL,
+                    date TEXT
+                 )''')
+
+cursor.execute('''CREATE TABLE IF NOT EXISTS expenses (
+                    id INTEGER PRIMARY KEY,
+                    category TEXT,
+                    amount REAL,
+                    date TEXT
+                 )''')
+
+cursor.execute('''CREATE TABLE IF NOT EXISTS budget (
+                    id INTEGER PRIMARY KEY,
+                    category TEXT,
+                    goal REAL
+                 )''')
+
+conn.commit()
+
+def add_income(source, amount, date):
+    cursor.execute("INSERT INTO income (source, amount, date) VALUES (?, ?, ?)", (source, amount, date))
+    conn.commit()
+    print("Income added successfully.")
+
+def add_expense(category, amount, date):
+    cursor.execute("INSERT INTO expenses (category, amount, date) VALUES (?, ?, ?)", (category, amount, date))
+    conn.commit()
+    print("Expense added successfully.")
+
+def set_budget(category, goal):
+    cursor.execute("INSERT OR REPLACE INTO budget (category, goal) VALUES (?, ?)", (category, goal))
+    conn.commit()
+    print("Budget goal set successfully.")
+
+def generate_report():
+    income_df = pd.read_sql_query("SELECT * FROM income", conn)
+    expenses_df = pd.read_sql_query("SELECT * FROM expenses", conn)
+
+    print("\nIncome Report:\n", income_df)
+    print("\nExpenses Report:\n", expenses_df)
+
+    total_income = income_df['amount'].sum()
+    total_expenses = expenses_df['amount'].sum()
+    print(f"\nTotal Income: {total_income}")
+    print(f"Total Expenses: {total_expenses}")
+    print(f"Net Savings: {total_income - total_expenses}")
+
+def visualize_expenses():
+    expenses_df = pd.read_sql_query("SELECT category, amount FROM expenses", conn)
+
+    if expenses_df.empty:
+        print("No expenses data to visualize.")
+        return
+
+    plt.figure(figsize=(8, 6))
+    sns.barplot(x='amount', y='category', data=expenses_df, palette='viridis')
+    plt.title('Expenses by Category')
+    plt.xlabel('Amount')
+    plt.ylabel('Category')
+    plt.tight_layout()
+    plt.show()
+
+def export_data():
+    income_df = pd.read_sql_query("SELECT * FROM income", conn)
+    expenses_df = pd.read_sql_query("SELECT * FROM expenses", conn)
+
+    income_df.to_csv('income_report.csv', index=False)
+    expenses_df.to_csv('expenses_report.csv', index=False)
+    print("Data exported to income_report.csv and expenses_report.csv.")
+
+def track_budget_progress():
+    expenses_df = pd.read_sql_query("SELECT category, SUM(amount) as total_spent FROM expenses GROUP BY category", conn)
+    budget_df = pd.read_sql_query("SELECT * FROM budget", conn)
+
+    if budget_df.empty:
+        print("No budget goals set.")
+        return
+
+    progress_df = pd.merge(budget_df, expenses_df, on='category', how='left').fillna(0)
+    progress_df['remaining'] = progress_df['goal'] - progress_df['total_spent']
+
+    print("\nBudget Progress:")
+    print(progress_df)
+
+    plt.figure(figsize=(8, 6))
+    sns.barplot(x='remaining', y='category', data=progress_df, palette='coolwarm')
+    plt.title('Budget Remaining by Category')
+    plt.xlabel('Remaining Amount')
+    plt.ylabel('Category')
+    plt.tight_layout()
+    plt.show()
+
+# Example usage
+def main():
+    print("Welcome to the Personal Finance Tracker!")
+    while True:
+        print("\nOptions:")
+        print("1. Add Income")
+        print("2. Add Expense")
+        print("3. Set Budget Goal")
+        print("4. Generate Report")
+        print("5. Visualize Expenses")
+        print("6. Track Budget Progress")
+        print("7. Export Data")
+        print("8. Exit")
+
+        choice = input("Enter your choice: ")
+
+        if choice == '1':
+            source = input("Enter income source: ")
+            amount = float(input("Enter amount: "))
+            date = input("Enter date (YYYY-MM-DD): ")
+            add_income(source, amount, date)
+
+        elif choice == '2':
+            category = input("Enter expense category: ")
+            amount = float(input("Enter amount: "))
+            date = input("Enter date (YYYY-MM-DD): ")
+            add_expense(category, amount, date)
+
+        elif choice == '3':
+            category = input("Enter category: ")
+            goal = float(input("Enter budget goal: "))
+            set_budget(category, goal)
+
+        elif choice == '4':
+            generate_report()
+
+        elif choice == '5':
+            visualize_expenses()
+
+        elif choice == '6':
+            track_budget_progress()
+
+        elif choice == '7':
+            export_data()
+
+        elif choice == '8':
+            print("Goodbye!")
+            break
+
+        else:
+            print("Invalid choice. Please try again.")
+
+if __name__ == "__main__":
+    main()
+
+# Close the database connection
+conn.close()
